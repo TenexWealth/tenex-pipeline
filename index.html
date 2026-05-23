@@ -1,0 +1,1447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tenex Wealth — Client Pipeline</title>
+<!-- SortableJS for drag-and-drop -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<style>
+/* ════════════════════════════════════════════════════════
+   TENEX WEALTH — CLIENT PIPELINE KANBAN
+   ════════════════════════════════════════════════════════ */
+:root {
+  color-scheme: light;
+  --navy:   #0d2340;  --navy2:  #1a3a5c;
+  --gold:   #c9a84c;  --gold2:  #e8c96a;
+  --bg:     #eef2f7;  --white:  #ffffff;
+  --border: #e2e8f0;  --text:   #1a202c;
+  --muted:  #64748b;  --red:    #ef4444;
+  --amber:  #f59e0b;  --green:  #10b981;
+  --blue:   #3b82f6;  --purple: #8b5cf6;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── FULL-VIEWPORT OVERRIDE ─────────────────────────── */
+html {
+  scroll-behavior: smooth;
+  width: 100% !important; max-width: 100% !important; overflow-x: hidden !important;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  background: var(--bg); color: var(--text); font-size: 13px;
+  min-height: 100vh; overflow-x: hidden;
+  width: 100% !important; max-width: 100% !important;
+  padding: 0 !important; margin: 0 !important;
+}
+#loadScreen, .kboard-outer, .comp-outer {
+  width: 100vw !important; max-width: 100vw !important;
+  position: relative; left: 50%; right: 50%;
+  margin-left: -50vw !important; margin-right: -50vw !important;
+}
+#loadScreen { position: fixed; inset: 0; left: 0 !important; margin: 0 !important; }
+/* Fixed topBar — guaranteed full-width regardless of WordPress container */
+#topBar {
+  position: fixed !important;
+  top: 0; left: 0 !important; right: 0;
+  width: 100vw !important; max-width: 100vw !important;
+  margin: 0 !important;
+  z-index: 9000;
+}
+/* Spacer so content doesn't hide under fixed bar */
+#topBarSpacer { display: block; width: 100%; }
+
+/* ── LOADING ─────────────────────────────────────────── */
+#loadScreen {
+  inset: 0; background: var(--navy);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  z-index: 9999; transition: opacity 0.4s;
+}
+#loadScreen.out { opacity: 0; pointer-events: none; }
+.load-logo { font-size: 52px; font-weight: 900; color: var(--gold); letter-spacing: -2px; }
+.load-sub  { color: #94a3b8; font-size: 13px; margin-top: 4px; }
+.load-bar  { width: 200px; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 24px; overflow: hidden; }
+.load-fill { height: 100%; background: var(--gold); border-radius: 2px; animation: loadSlide 1.4s ease-in-out infinite; }
+@keyframes loadSlide { 0%{width:0;transform:translateX(0)} 50%{width:60%} 100%{width:0;transform:translateX(340px)} }
+
+/* ── TOP BAR ─────────────────────────────────────────── */
+.hrow {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 20px; gap: 10px; background: var(--navy);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.25);
+}
+.logo-wrap { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.logo-badge {
+  width: 36px; height: 36px; background: var(--gold); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; color: var(--navy); font-size: 14px; letter-spacing: -1px;
+}
+.title-block h1 { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: -0.3px; }
+.title-block p  { font-size: 10px; color: #94a3b8; margin-top: 1px; }
+.hrow-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.save-pill {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: #94a3b8; padding: 4px 8px;
+  border: 1px solid rgba(255,255,255,0.1); border-radius: 20px;
+}
+.sdot { width: 7px; height: 7px; border-radius: 50%; background: #475569; transition: background 0.3s; }
+.sdot.ok  { background: var(--green); }
+.sdot.busy{ background: var(--amber); animation: blink 1s infinite; }
+.sdot.err { background: var(--red); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+/* ── STATS ROW ───────────────────────────────────────── */
+.srow {
+  display: grid; grid-template-columns: repeat(6, 1fr);
+  border-top: 1px solid rgba(255,255,255,0.07);
+  background: #091c33;
+}
+.sc { padding: 7px 10px; text-align: center; border-right: 1px solid rgba(255,255,255,0.06); }
+.sc:last-child { border-right: none; }
+.sc .n { font-size: 19px; font-weight: 800; color: #fff; line-height: 1; }
+.sc .l { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: #64748b; margin-top: 2px; }
+.sc.cr .n { color: #fca5a5; } .sc.ca .n { color: #fcd34d; }
+.sc.cg .n { color: #6ee7b7; } .sc.cb .n { color: #93c5fd; }
+
+/* ── FILTER ROW ──────────────────────────────────────── */
+.frow {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 8px 20px 10px;
+  background: #0b2039;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.fgroup { display: flex; align-items: center; gap: 5px; }
+.flbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #64748b; white-space: nowrap; }
+.fsel, .fdate {
+  padding: 5px 8px; border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 5px; font-size: 11px; background: rgba(255,255,255,0.09);
+  color: #fff; outline: none; cursor: pointer; transition: background .15s;
+}
+.fsel:focus, .fdate:focus { background: rgba(255,255,255,0.15); }
+.fsel option { background: #1a3a5c; color: #fff; }
+.swrap { position: relative; }
+.fsearch {
+  padding: 5px 8px 5px 26px; border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 5px; font-size: 11px; background: rgba(255,255,255,0.09);
+  color: #fff; outline: none; width: 190px; transition: all .2s;
+}
+.fsearch::placeholder { color: rgba(255,255,255,0.35); }
+.fsearch:focus { background: rgba(255,255,255,0.16); width: 220px; }
+.sico { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,.35); pointer-events: none; }
+.ftoggle {
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 9px; border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 5px; font-size: 11px; color: rgba(255,255,255,.6);
+  background: rgba(255,255,255,0.08); cursor: pointer; user-select: none; transition: all .15s;
+}
+.ftoggle.on { background: rgba(59,130,246,.25); border-color: rgba(59,130,246,.5); color: #93c5fd; }
+.fsp { flex: 1; min-width: 0; }
+
+/* ── TAB BAR ─────────────────────────────────────────── */
+.tab-bar {
+  display: flex; align-items: center; gap: 2px;
+  padding: 0 16px;
+  background: #071829;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+.tab-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 11px 18px 10px; border: none; background: none;
+  color: rgba(255,255,255,0.5); font-size: 12px; font-weight: 600;
+  cursor: pointer; border-bottom: 3px solid transparent;
+  transition: all .15s; position: relative; top: 1px; white-space: nowrap;
+}
+.tab-btn:hover { color: rgba(255,255,255,0.85); }
+.tab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+.tab-count {
+  background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.6);
+  font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 10px;
+  min-width: 20px; text-align: center;
+}
+.tab-btn.active .tab-count { background: rgba(201,168,76,0.22); color: var(--gold); }
+
+/* ── BUTTONS ─────────────────────────────────────────── */
+.btn {
+  padding: 6px 12px; border-radius: 6px; border: none;
+  cursor: pointer; font-size: 12px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 5px;
+  transition: all .15s; white-space: nowrap; line-height: 1;
+}
+.btn svg { flex-shrink: 0; }
+.btn-gold    { background: var(--gold); color: var(--navy); }
+.btn-gold:hover { background: var(--gold2); }
+.btn-green   { background: var(--green); color: #fff; font-size: 13px; padding: 9px 16px; }
+.btn-green:hover { background: #059669; }
+.btn-navy    { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.18); }
+.btn-navy:hover { background: rgba(255,255,255,.18); }
+.btn-ghost   { background: #fff; color: var(--muted); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--bg); }
+.btn-primary { background: var(--navy); color: #fff; }
+.btn-primary:hover { background: var(--navy2); }
+.btn-danger  { background: var(--red); color: #fff; }
+.btn-danger:hover { background: #dc2626; }
+.btn-import  { background: rgba(16,185,129,.2); color: #6ee7b7; border: 1px solid rgba(16,185,129,.35); }
+.btn-import:hover { background: rgba(16,185,129,.3); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── KANBAN LAYOUT ───────────────────────────────────── */
+.kboard-outer { overflow-x: auto; padding: 16px 16px 32px; min-height: calc(100vh - 178px); }
+.kboard {
+  display: grid; grid-template-columns: repeat(4, minmax(290px, 1fr));
+  gap: 14px; min-width: 1160px; align-items: start;
+}
+.kcol {
+  background: var(--white); border-radius: 12px; border: 1px solid var(--border);
+  display: flex; flex-direction: column; max-height: calc(100vh - 196px);
+  overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.col-head {
+  padding: 11px 14px 10px; display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 3px solid transparent; flex-shrink: 0; border-radius: 12px 12px 0 0;
+}
+.col-head-left { display: flex; align-items: center; gap: 8px; }
+.col-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.col-title { font-size: 13px; font-weight: 700; color: var(--navy); }
+.col-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.col-cards {
+  flex: 1; overflow-y: auto; padding: 10px;
+  display: flex; flex-direction: column; gap: 8px; min-height: 80px;
+}
+.col-cards::-webkit-scrollbar { width: 4px; }
+.col-cards::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
+.col-cards.drag-over { background: rgba(59,130,246,.04); border-radius: 8px; }
+
+/* ── CLIENT CARD ─────────────────────────────────────── */
+.ccard {
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06); cursor: grab;
+  transition: box-shadow .18s, transform .1s; user-select: none; position: relative;
+}
+.ccard:hover { box-shadow: 0 4px 14px rgba(0,0,0,.10); }
+.ccard.sortable-ghost  { opacity: .38; transform: scale(.97); }
+.ccard.sortable-chosen { cursor: grabbing; box-shadow: 0 8px 28px rgba(0,0,0,.15); transform: scale(1.01); z-index: 20; }
+.ccard.sortable-drag   { box-shadow: 0 16px 40px rgba(0,0,0,.2); opacity: .95; }
+.card-strip { height: 4px; border-radius: 10px 10px 0 0; }
+.card-top {
+  padding: 10px 12px 8px; display: flex; align-items: flex-start; justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+}
+.card-name  { font-size: 14px; font-weight: 800; color: var(--navy); line-height: 1.25; }
+.card-email { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.card-meta-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.progress-ring-wrap { position: relative; width: 36px; height: 36px; }
+.progress-ring-wrap svg { transform: rotate(-90deg); }
+.prog-bg { fill: none; stroke: #f1f5f9; stroke-width: 3; }
+.prog-fg { fill: none; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset .4s; }
+.ring-text {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: var(--navy);
+}
+.card-tasks { padding: 4px 8px 6px; display: flex; flex-direction: column; gap: 2px; }
+.trow {
+  display: flex; align-items: flex-start; gap: 7px; padding: 5px 4px; border-radius: 5px;
+  transition: background .1s; cursor: default;
+}
+.trow:hover { background: #f8fafc; }
+.trow.done { opacity: .5; }
+.trow.done .ttitle { text-decoration: line-through; color: var(--muted); }
+.tcb { width: 14px; height: 14px; margin-top: 2px; flex-shrink: 0; cursor: pointer; accent-color: var(--green); }
+.tbody { flex: 1; min-width: 0; }
+.ttitle { font-size: 11px; font-weight: 500; line-height: 1.4; color: var(--text); }
+.tmeta  { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px; }
+.bdg {
+  display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px; border-radius: 10px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+}
+.bh { background: #fef2f2; color: var(--red); }
+.bm { background: #fffbeb; color: #d97706; }
+.bl { background: #f0fdf4; color: #059669; }
+.bc { background: #eff6ff; color: var(--blue); }
+.bd { background: #f1f5f9; color: var(--muted); }
+.bd.ov { background: #fef2f2; color: var(--red); }
+.bd.td { background: #fffbeb; color: #d97706; }
+.bd.sn { background: #fff7ed; color: #ea580c; }
+.ba { background: #f1f5f9; color: #475569; }
+.card-foot {
+  padding: 6px 12px 8px; display: flex; align-items: center; justify-content: space-between;
+  border-top: 1px solid #f8fafc;
+}
+.pbar-wrap { display: flex; align-items: center; gap: 6px; }
+.pbar  { width: 64px; height: 4px; background: #f1f5f9; border-radius: 2px; overflow: hidden; }
+.pfill { height: 100%; border-radius: 2px; transition: width .35s; }
+.ptext { font-size: 10px; color: var(--muted); }
+.new-pill { font-size: 9px; font-weight: 700; background: #fef9c3; color: #92400e; padding: 2px 7px; border-radius: 10px; }
+.mark-complete-btn {
+  display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border: none;
+  border-radius: 5px; font-size: 10px; font-weight: 700; cursor: pointer;
+  background: #f0fdf4; color: #059669; transition: all .15s;
+}
+.mark-complete-btn:hover { background: #dcfce7; }
+.col-empty { text-align: center; padding: 28px 16px; color: var(--muted); font-size: 12px; border: 2px dashed #e2e8f0; border-radius: 8px; line-height: 1.7; }
+
+/* ── TASK DELETE + ADD TASK ──────────────────────────── */
+.task-del-btn {
+  opacity: 0; flex-shrink: 0; background: none; border: none; cursor: pointer;
+  color: #94a3b8; padding: 2px 5px; border-radius: 3px;
+  font-size: 12px; line-height: 1; transition: all .15s; margin-left: auto;
+}
+.trow:hover .task-del-btn { opacity: 1; }
+.task-del-btn:hover { background: #fef2f2; color: var(--red); }
+.card-del-btn {
+  background: none; border: none; cursor: pointer; color: #cbd5e1;
+  padding: 3px 5px; border-radius: 4px; transition: all .15s; flex-shrink: 0; line-height: 1; margin-top: 2px;
+}
+.card-del-btn:hover { background: #fef2f2; color: var(--red); }
+.edit-client-btn {
+  background: none; border: none; cursor: pointer; color: #cbd5e1;
+  padding: 3px 5px; border-radius: 4px; transition: all .15s; flex-shrink: 0; line-height: 1; margin-top: 2px;
+}
+.edit-client-btn:hover { background: #eff6ff; color: var(--blue); }
+.edit-form {
+  padding: 8px 12px 10px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.edit-form-row { display: flex; gap: 6px; align-items: center; }
+.ef-lbl { font-size: 10px; font-weight: 700; color: var(--muted); white-space: nowrap; min-width: 34px; }
+.ef-inp {
+  flex: 1; padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 12px; outline: none; color: var(--text); transition: border-color .15s;
+}
+.ef-inp:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(59,130,246,.1); }
+.add-task-section { padding: 0 8px 8px; border-top: 1px dashed #e2e8f0; margin-top: 2px; }
+.add-task-btn {
+  width: 100%; padding: 7px 4px; border: none; background: none; cursor: pointer;
+  color: var(--muted); font-size: 11px; font-weight: 600; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; gap: 4px; transition: all .15s; margin-top: 2px;
+}
+.add-task-btn:hover { background: #f0fdf4; color: var(--green); }
+.atform { display: flex; flex-direction: column; gap: 6px; padding: 8px 4px 2px; }
+.at-input {
+  width: 100%; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 12px; outline: none; color: var(--text); transition: border-color .15s;
+}
+.at-input:focus { border-color: var(--navy2); box-shadow: 0 0 0 2px rgba(26,58,92,.08); }
+.at-row { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+.at-sel, .at-date, .at-who {
+  padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px;
+  font-size: 11px; background: #fff; color: var(--text); outline: none;
+}
+.at-sel:focus, .at-date:focus, .at-who:focus { border-color: var(--navy2); }
+.at-sel { width: 85px; } .at-date { flex: 1; min-width: 105px; } .at-who { flex: 1; min-width: 80px; }
+.at-comp { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); cursor: pointer; flex: 1; }
+.at-comp input { accent-color: var(--blue); width: 13px; height: 13px; }
+
+/* ── COMPLETED VIEW ──────────────────────────────────── */
+.comp-outer { padding: 16px 16px 32px; min-height: calc(100vh - 178px); }
+.comp-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 14px; max-width: 1400px; margin: 0 auto;
+}
+.comp-card { background: #fff; border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.comp-strip { height: 4px; background: var(--green); border-radius: 10px 10px 0 0; }
+.comp-head {
+  padding: 10px 12px 8px; display: flex; align-items: flex-start; justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+}
+.comp-name  { font-size: 14px; font-weight: 800; color: var(--navy); }
+.comp-email { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.comp-badge { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 10px; background: #f0fdf4; color: #059669; white-space: nowrap; flex-shrink: 0; }
+.comp-tasks { padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; }
+.comp-foot  {
+  padding: 8px 12px; display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; border-top: 1px solid #f8fafc; flex-wrap: wrap;
+}
+.comp-days { font-size: 10px; color: var(--muted); }
+.compliance-btn {
+  display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border: none;
+  border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;
+  background: #fef3c7; color: #92400e; transition: all .15s;
+}
+.compliance-btn:hover { background: #fde68a; }
+.compliance-btn.urgent { background: #fef2f2; color: var(--red); animation: pulse-red 2s infinite; }
+@keyframes pulse-red { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.3)} 50%{box-shadow:0 0 0 6px rgba(239,68,68,0)} }
+
+/* ── MODALS ──────────────────────────────────────────── */
+.ov { position: fixed; inset: 0; background: rgba(13,35,64,.6); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(3px); }
+.ov.h { display: none; }
+.modal {
+  background: #fff; border-radius: 14px; padding: 24px; width: 500px;
+  max-width: 96vw; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 28px 64px rgba(0,0,0,.22); animation: popIn .18s ease-out;
+}
+@keyframes popIn { from{transform:scale(.95);opacity:0} to{transform:scale(1);opacity:1} }
+.mhead { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 4px; }
+.mhead h2 { font-size: 17px; font-weight: 800; color: var(--navy); line-height: 1.2; }
+.mclose { background: none; border: none; cursor: pointer; color: var(--muted); padding: 2px; border-radius: 4px; }
+.mclose:hover { background: var(--bg); }
+.msub  { font-size: 12px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
+.frow2 { margin-bottom: 14px; }
+.flbl2 { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--navy); margin-bottom: 5px; }
+.finp  {
+  width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px;
+  font-size: 13px; outline: none; color: var(--text); transition: border-color .15s;
+}
+.finp:focus { border-color: var(--navy2); }
+.fhint { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+.mfoot { display: flex; gap: 8px; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--border); margin-top: 16px; }
+.task-preview { background: #f8fafc; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+.task-preview h4 { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); margin-bottom: 10px; }
+.tp-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; color: var(--text); border-bottom: 1px solid #f1f5f9; flex-wrap: wrap; }
+.tp-item:last-child { border-bottom: none; }
+.tp-check { color: var(--green); font-weight: 700; font-size: 11px; flex-shrink: 0; }
+.tp-num { width: 20px; height: 20px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.tp-tag { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+.tp-comp { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+/* Import modal specifics */
+.import-paste {
+  width: 100%; height: 140px; font-size: 12px; font-family: 'SF Mono','Fira Code',Consolas,monospace;
+  padding: 10px; border: 2px dashed var(--border); border-radius: 8px;
+  resize: none; outline: none; color: var(--text); background: #fafafa; transition: border-color .2s;
+}
+.import-paste:focus { border-color: var(--green); background: #fff; }
+.import-preview {
+  max-height: 260px; overflow-y: auto; border: 1px solid var(--border);
+  border-radius: 8px; background: #fafafa; padding: 8px;
+}
+.import-group { margin-bottom: 10px; }
+.import-group:last-child { margin-bottom: 0; }
+.import-ref {
+  font-size: 12px; font-weight: 700; color: var(--navy);
+  padding: 4px 6px; background: #eff6ff; border-radius: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 4px;
+}
+.import-count { font-size: 10px; font-weight: 600; color: var(--blue); }
+.import-task  { font-size: 11px; color: var(--text); padding: 3px 6px; display: flex; align-items: center; gap: 5px; }
+
+/* Sync info box */
+.sync-info {
+  background: #f0fdf4; border: 1px solid #a7f3d0; border-radius: 8px;
+  padding: 12px; font-size: 12px; color: #065f46; line-height: 1.6; margin-bottom: 14px;
+}
+.sync-info strong { color: #064e3b; }
+.sync-info code {
+  background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 3px;
+  font-family: 'SF Mono',Consolas,monospace; font-size: 11px;
+}
+.danger-zone { border-top: 1px solid var(--border); margin-top: 16px; padding-top: 16px; }
+.danger-zone p { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+
+/* ── TOAST ───────────────────────────────────────────── */
+#toast {
+  position: fixed; bottom: 22px; right: 22px;
+  background: var(--navy); color: #fff; padding: 10px 16px; border-radius: 9px;
+  font-size: 12px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,.2);
+  z-index: 999; transform: translateY(80px); opacity: 0;
+  transition: transform .25s, opacity .25s; max-width: 320px; pointer-events: none;
+}
+#toast.show { transform: translateY(0); opacity: 1; }
+#toast.tg { background: var(--green); } #toast.tr { background: var(--red); }
+#toast.ta { background: #d97706; }     #toast.tb { background: var(--blue); }
+
+/* ── SCROLLBARS ──────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+/* ── MOBILE ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .hrow { padding: 10px 14px; }
+  .srow { grid-template-columns: repeat(3, 1fr); }
+  .frow { padding: 8px 14px 10px; }
+  .fsearch { width: 140px; }
+  .kboard-outer { padding: 10px 10px 24px; }
+  .kboard { min-width: 960px; gap: 10px; }
+  .title-block p { display: none; }
+  .save-pill span { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════ LOADING ══════════ -->
+<div id="loadScreen">
+  <div class="load-logo">TW</div>
+  <div class="load-sub">Loading client pipeline…</div>
+  <div class="load-bar"><div class="load-fill"></div></div>
+</div>
+
+<!-- ══════════ TOP BAR ══════════ -->
+<div id="topBar">
+
+  <!-- Row 1: Header -->
+  <div class="hrow">
+    <div class="logo-wrap">
+      <div class="logo-badge">TW</div>
+      <div class="title-block">
+        <h1>Client Pipeline</h1>
+        <p>Tenex Wealth · Insight Investment Partners</p>
+      </div>
+    </div>
+    <!-- Primary action — centre-left for instant visibility -->
+    <div style="display:flex;align-items:center;gap:8px;margin-left:20px;">
+      <button class="btn btn-gold" style="font-size:13px;padding:9px 18px;font-weight:700;" onclick="openOnboard()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Client &amp; Tasks
+      </button>
+    </div>
+    <div class="hrow-right">
+      <div class="save-pill">
+        <div class="sdot" id="sdot"></div>
+        <span id="sstatus">Loading…</span>
+      </div>
+      <button class="btn btn-import" onclick="openImport()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Import from Claude
+      </button>
+      <button class="btn btn-navy" onclick="openSettings()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06-.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </button>
+    </div>
+  </div>
+
+  <!-- Row 2: Stats -->
+  <div class="srow">
+    <div class="sc"><div class="n" id="sTot">–</div><div class="l">Clients</div></div>
+    <div class="sc cb"><div class="n" id="sOb">–</div><div class="l">Discovery</div></div>
+    <div class="sc"><div class="n" id="sPend">–</div><div class="l">Tasks Pending</div></div>
+    <div class="sc cr"><div class="n" id="sOv">–</div><div class="l">Overdue</div></div>
+    <div class="sc cr"><div class="n" id="sCo">–</div><div class="l">⚑ Compliance</div></div>
+    <div class="sc cg"><div class="n" id="sDone">–</div><div class="l">Completed</div></div>
+  </div>
+
+  <!-- Row 3: Filters -->
+  <div class="frow">
+    <div class="swrap">
+      <svg class="sico" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="fsearch" id="qSearch" type="text" placeholder="Search clients, tasks…" oninput="applyFilters()">
+    </div>
+    <div class="fgroup">
+      <span class="flbl">Assignee</span>
+      <select class="fsel" id="fAssignee" onchange="applyFilters()"><option value="">All</option></select>
+    </div>
+    <div class="fgroup">
+      <span class="flbl">Priority</span>
+      <select class="fsel" id="fPriority" onchange="applyFilters()">
+        <option value="">All</option><option value="high">High</option>
+        <option value="medium">Medium</option><option value="low">Low</option>
+      </select>
+    </div>
+    <div class="fgroup">
+      <span class="flbl">Status</span>
+      <select class="fsel" id="fStatus" onchange="applyFilters()">
+        <option value="">All</option><option value="pending">Pending</option>
+        <option value="completed">Completed</option>
+      </select>
+    </div>
+    <div class="fgroup">
+      <span class="flbl">Due by</span>
+      <input class="fdate" id="fDue" type="date" onchange="applyFilters()">
+    </div>
+    <div class="ftoggle" id="compBtn" onclick="toggleComp()">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Compliance
+    </div>
+    <div class="fsp"></div>
+    <button class="btn btn-navy" onclick="clearFilters()" style="font-size:11px">✕ Clear</button>
+    <button class="btn btn-navy" onclick="exportBackup()" style="font-size:11px" title="Download full backup as JSON">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Backup
+    </button>
+  </div>
+
+  <!-- Row 4: Tab Bar -->
+  <div class="tab-bar" id="tabBar">
+    <button class="tab-btn active" id="tabPipeline" onclick="switchView('pipeline')">
+      📋 Pipeline <span class="tab-count" id="tcPipeline">–</span>
+    </button>
+    <button class="tab-btn" id="tabCompleted" onclick="switchView('completed')">
+      ✅ Completed <span class="tab-count" id="tcCompleted">0</span>
+    </button>
+  </div>
+</div>
+<div id="topBarSpacer"></div>
+
+<!-- ══════════ KANBAN BOARD ══════════ -->
+<div class="kboard-outer" id="pipelineOuter">
+  <div class="kboard" id="kboard"></div>
+</div>
+
+<!-- ══════════ COMPLETED VIEW ══════════ -->
+<div class="comp-outer" id="compOuter" style="display:none">
+  <div class="comp-grid" id="compGrid"></div>
+</div>
+
+<!-- ══════════ MODAL: IMPORT FROM CLAUDE ══════════ -->
+<div class="ov h" id="ovImport">
+  <div class="modal" style="width:560px">
+    <div class="mhead">
+      <h2>📥 Import Tasks from Claude</h2>
+      <button class="mclose" onclick="closeImport()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <p class="msub">Forward or paste a sent email into the <strong>Team Task Parser</strong> project to get a JSON task list. Then paste that JSON below — tasks will be added to the right client cards automatically.</p>
+    <div class="frow2">
+      <label class="flbl2">Paste task JSON from Claude</label>
+      <textarea class="import-paste" id="importText" placeholder='[{"task_id":"...","title":"...","client_reference":"...","assignee":"...","priority":"high","due_date":"2026-06-01","compliance_flag":false}]' oninput="previewImport()"></textarea>
+    </div>
+    <div id="importPreview" class="import-preview" style="display:none"></div>
+    <div class="mfoot">
+      <button class="btn btn-ghost" onclick="closeImport()">Cancel</button>
+      <button class="btn btn-primary" id="importConfirmBtn" onclick="confirmImport()" disabled>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Add to Pipeline
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ MODAL: ONBOARD NEW CLIENT ══════════ -->
+<div class="ov h" id="ovOnboard">
+  <div class="modal" style="width:560px;max-height:90vh;overflow-y:auto;">
+    <div class="mhead">
+      <h2>👋 New Client &amp; Tasks</h2>
+      <button class="mclose" onclick="closeOnboard()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <p class="msub">Client lands in <strong style="color:#d97706">🔍 Discovery</strong> with all 10 Admin SOP tasks pre-loaded.</p>
+    <div class="frow2">
+      <label class="flbl2">Client Full Name *</label>
+      <input class="finp" id="ncName" type="text" placeholder="e.g. James &amp; Sarah Wilson">
+    </div>
+    <div class="frow2" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div>
+        <label class="flbl2">Client Email</label>
+        <input class="finp" id="ncEmail" type="email" placeholder="client@email.com">
+      </div>
+      <div>
+        <label class="flbl2">Assigned Admin</label>
+        <input class="finp" id="ncAssignee" type="text" placeholder="e.g. Sarah">
+      </div>
+    </div>
+    <div class="task-preview" style="margin-top:14px;">
+      <h4 style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#64748b;margin-bottom:8px;">10 SOP Tasks — Auto-loaded on creation</h4>
+      <div class="tp-item"><span class="tp-num">1</span> File &amp; archive signed documents into SharePoint folder <span class="tp-tag tp-comp">⚑ Compliance</span></div>
+      <div class="tp-item"><span class="tp-num">2</span> Log receipt in iC2 File Notes (date, time, initials) <span class="tp-tag tp-comp">⚑ Compliance</span></div>
+      <div class="tp-item"><span class="tp-num">3</span> Add client(s) into iC2 — full details, DOB, TFN, contact <span class="tp-tag tp-comp">⚑ Compliance</span></div>
+      <div class="tp-item"><span class="tp-num">4</span> Add client(s) into Xplan — link to iC2 record <span class="tp-tag tp-comp">⚑ Compliance</span></div>
+      <div class="tp-item"><span class="tp-num">5</span> Send Welcome Email with Risk Profile Questionnaire link <span class="tp-tag tp-comp">⚑ Compliance</span></div>
+      <div class="tp-item"><span class="tp-num">6</span> Create iC2 Project Board using standard onboarding template</div>
+      <div class="tp-item"><span class="tp-num">7</span> Send Third-Party Authority letters to super/insurance providers <span class="tp-tag tp-comp">⚑ Compliance</span></div>
+      <div class="tp-item"><span class="tp-num">8</span> Set 5-day reminder in iC2 and Outlook to chase fund data</div>
+      <div class="tp-item"><span class="tp-num">9</span> Complete Research &amp; Modelling — run WealthSolver scenario <span class="tp-tag tp-comp">⚑ Compliance</span></div>
+      <div class="tp-item"><span class="tp-num">10</span> Internal handover email to adviser — confirm all admin complete</div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-ghost" onclick="closeOnboard()">Cancel</button>
+      <button class="btn btn-gold" style="font-size:13px;padding:9px 20px;" onclick="createClient()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Create Client
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ MODAL: SETTINGS ══════════ -->
+<div class="ov h" id="ovSettings">
+  <div class="modal" style="width:520px">
+    <div class="mhead">
+      <h2>⚙️ Settings &amp; Cloud Sync</h2>
+      <button class="mclose" onclick="closeSettings()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="sync-info">
+      <strong>Cloud sync via JSONBin.io (free)</strong><br>
+      Data is always saved locally in your browser. To sync across team devices:<br>
+      1. Go to <strong>jsonbin.io</strong> → Sign up free → <strong>New Bin</strong> → paste <code>{}</code> → Save<br>
+      2. Copy the <strong>Bin ID</strong> from the URL bar<br>
+      3. Go to <strong>Account → API Keys</strong> → copy your <strong>Master Key</strong><br>
+      4. Paste both below → Save → all team members do the same
+    </div>
+    <div class="frow2">
+      <label class="flbl2">JSONBin Bin ID</label>
+      <input class="finp" id="sBinId" type="text" placeholder="e.g. 6659a3e0acd3cb34a8524d3c">
+      <p class="fhint">Found in the URL after creating a bin: jsonbin.io/v3/b/<strong>{this-id}</strong>/latest</p>
+    </div>
+    <div class="frow2">
+      <label class="flbl2">JSONBin Master Key (API Key)</label>
+      <input class="finp" id="sBinKey" type="password" placeholder="$2a$10$…">
+      <p class="fhint">Found under Account → API Keys in JSONBin. Stored only in your browser.</p>
+    </div>
+    <div class="danger-zone">
+      <p>⚠️ Danger zone — these actions cannot be undone</p>
+      <button class="btn btn-danger" onclick="clearAllData()" style="font-size:11px">
+        🗑️ Reset Pipeline (delete all clients &amp; tasks)
+      </button>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save &amp; Sync</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════════
+     SCRIPT
+     ══════════════════════════════════════════════════════ -->
+<script>
+// ═══════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════
+const STORAGE_KEY = 'tenex_pipeline_v2';
+let BIN_ID  = localStorage.getItem('tenex_bin_id')  || '';
+let BIN_KEY = localStorage.getItem('tenex_bin_key') || '';
+
+// ═══════════════════════════════════════════════════════
+// STAGE CONFIG
+// ═══════════════════════════════════════════════════════
+const STAGES = ['Discovery','Second Meeting','Advice Meeting','Implementation'];
+const SM = {
+  'Discovery':      { color:'#d97706', light:'#fffbeb', border:'#fcd34d', emoji:'🔍' },
+  'Second Meeting': { color:'#10b981', light:'#f0fdf4', border:'#6ee7b7', emoji:'📋' },
+  'Advice Meeting': { color:'#ef4444', light:'#fef2f2', border:'#fca5a5', emoji:'💡' },
+  'Implementation': { color:'#8b5cf6', light:'#f5f3ff', border:'#c4b5fd', emoji:'⚙️' }
+};
+// 10 SOP tasks auto-loaded for every new client (Admin Team S.O.P.)
+const OB_TASKS = [
+  { title:'File & archive signed documents into SharePoint folder',          priority:'high',   compliance:'Yes', days:0  },
+  { title:'Log receipt in iC2 File Notes (date, time, initials)',            priority:'high',   compliance:'Yes', days:0  },
+  { title:'Add client(s) into iC2 — full details, DOB, TFN, contact',       priority:'high',   compliance:'Yes', days:0  },
+  { title:'Add client(s) into Xplan — link to iC2 record',                  priority:'high',   compliance:'Yes', days:0  },
+  { title:'Send Welcome Email with Risk Profile Questionnaire link',          priority:'high',   compliance:'Yes', days:0  },
+  { title:'Create iC2 Project Board using standard onboarding template',     priority:'high',   compliance:'No',  days:0  },
+  { title:'Send Third-Party Authority letters to super/insurance providers',  priority:'high',   compliance:'Yes', days:0  },
+  { title:'Set 5-day reminder in iC2 and Outlook to chase fund data',        priority:'medium', compliance:'No',  days:1  },
+  { title:'Complete Research & Modelling — run WealthSolver scenario',       priority:'high',   compliance:'Yes', days:5  },
+  { title:'Internal handover email to adviser — confirm all admin complete', priority:'high',   compliance:'No',  days:5  }
+];
+
+// ═══════════════════════════════════════════════════════
+// SAMPLE DATA (shown on first load with no stored data)
+// ═══════════════════════════════════════════════════════
+const SAMPLE_DATA = {
+  version: 2,
+  lastModified: new Date().toISOString(),
+  clients: [
+    { ref:'James Wilson', email:'james.wilson@email.com', stage:'Discovery', isNew:false, completedAt:null, tasks:[
+      {id:'T001',title:'Send welcome pack & engagement letter',assignee:'Sarah',priority:'high',due:'2026-05-25',compliance:'No',status:'completed',desc:'',link:''},
+      {id:'T002',title:'Collect Fact Find / risk profile questionnaire',assignee:'Admin',priority:'high',due:'2026-05-30',compliance:'Yes',status:'pending',desc:'',link:''},
+      {id:'T003',title:'Complete KYC / AML / CDD checks',assignee:'Admin',priority:'high',due:'2026-05-28',compliance:'Yes',status:'pending',desc:'',link:''},
+      {id:'T004',title:'Gather existing statements & tax returns',assignee:'Sarah',priority:'medium',due:'2026-06-02',compliance:'No',status:'pending',desc:'',link:''},
+      {id:'T005',title:'Schedule second meeting',assignee:'Admin',priority:'medium',due:'2026-06-05',compliance:'No',status:'pending',desc:'',link:''}
+    ]},
+    { ref:'Sarah & Tom Chen', email:'chen.family@email.com', stage:'Second Meeting', isNew:false, completedAt:null, tasks:[
+      {id:'T006',title:'Send pre-meeting portfolio summary',assignee:'Sarah',priority:'high',due:'2026-05-26',compliance:'No',status:'completed',desc:'',link:''},
+      {id:'T007',title:'Review risk profile responses',assignee:'Sarah',priority:'high',due:'2026-05-27',compliance:'Yes',status:'pending',desc:'',link:''},
+      {id:'T008',title:'Prepare preliminary strategy options',assignee:'Admin',priority:'medium',due:'2026-05-29',compliance:'No',status:'pending',desc:'',link:''}
+    ]},
+    { ref:'Michael Okafor', email:'m.okafor@email.com', stage:'Advice Meeting', isNew:false, completedAt:null, tasks:[
+      {id:'T009',title:'Finalise SOA for presentation',assignee:'Sarah',priority:'high',due:'2026-05-24',compliance:'Yes',status:'pending',desc:'',link:''},
+      {id:'T010',title:'Book advice meeting room / Zoom',assignee:'Admin',priority:'medium',due:'2026-05-23',compliance:'No',status:'completed',desc:'',link:''},
+      {id:'T011',title:'Send SOA and fee agreement pre-read',assignee:'Admin',priority:'high',due:'2026-05-25',compliance:'Yes',status:'pending',desc:'',link:''}
+    ]},
+    { ref:'The Patel Family', email:'patel.family@email.com', stage:'Implementation', isNew:false, completedAt:null, tasks:[
+      {id:'T012',title:'Submit rollover request to ATO portal',assignee:'Admin',priority:'high',due:'2026-05-30',compliance:'Yes',status:'pending',desc:'',link:''},
+      {id:'T013',title:'Set up new investment platform account',assignee:'Sarah',priority:'high',due:'2026-06-03',compliance:'No',status:'pending',desc:'',link:''},
+      {id:'T014',title:'Process insurance application',assignee:'Admin',priority:'high',due:'2026-05-28',compliance:'Yes',status:'completed',desc:'',link:''},
+      {id:'T015',title:'Update beneficiary nominations',assignee:'Admin',priority:'medium',due:'2026-06-10',compliance:'Yes',status:'pending',desc:'',link:''}
+    ]}
+  ]
+};
+
+// ═══════════════════════════════════════════════════════
+// SEED CLIENTS — real clients from sent emails (injected once, then saved)
+// These are merged into the board on first load only if the ref doesn't exist yet
+// ═══════════════════════════════════════════════════════
+const SEED_CLIENTS = [
+  { ref:'Jared & Michelle Dorans', email:'', stage:'Advice Meeting', isNew:false, completedAt:null, tasks:[
+    {id:'SC-JMD-001',title:'Write new SOA for SMSF establishment to purchase commercial property — 5 Hawker Place, New Lambton childcare centre',assignee:'JR',priority:'high',due:'2026-05-28',compliance:'Yes',status:'pending',desc:'SOA required for SMSF to purchase commercial property via LRBA. Michelle is a new client.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oZAQAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-JMD-002',title:'Include borrowing and LRBA calculations in SOA',assignee:'JR',priority:'high',due:'2026-05-28',compliance:'Yes',status:'pending',desc:'LRBA borrowing structure and calculations must be included in the SMSF SOA.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oZAQAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-JMD-003',title:'Review file and super research — confirm what\'s needed to write SOA',assignee:'JR',priority:'high',due:'2026-05-26',compliance:'No',status:'pending',desc:'JR to review existing file and super research before commencing SOA.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oZAQAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-JMD-004',title:'Add Michelle Dorans to iC2 and Xplan as new client',assignee:'Admin',priority:'high',due:'2026-05-26',compliance:'Yes',status:'pending',desc:'Michelle is a new client — must be added to both iC2 and Xplan with full details.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oZAQAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'}
+  ]},
+  { ref:'Tim & Natasha Real', email:'', stage:'Advice Meeting', isNew:false, completedAt:null, tasks:[
+    {id:'SC-TNR-001',title:'Write SOA — super strategy, $300k bucket company investment (Hub24), investment bonds (3 children), insurance self-insure, estate planning referral, cashflow modelling',assignee:'JR',priority:'high',due:'2026-05-30',compliance:'Yes',status:'pending',desc:'Comprehensive SOA covering all strategy areas discussed. Use Hub24 platform (not Netwealth).',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABvM4GawAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-TNR-002',title:'Clarify QSuper vs ART for Tim (retain $6k for insurance) and Natasha (QSuper = ART, no rollover needed)',assignee:'JR',priority:'high',due:'2026-05-26',compliance:'Yes',status:'pending',desc:'Tim: retain $6k in QSuper for insurance, confirm rest to ART. Natasha: QSuper IS ART — no rollover needed.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABvM4GawAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-TNR-003',title:'Update WealthSolver comparison: use Hub24 (not Netwealth), add Praemium as higher-cost alternative',assignee:'JR',priority:'medium',due:'2026-05-28',compliance:'No',status:'pending',desc:'Rerun WealthSolver with Hub24 as primary platform. Add Praemium for comparison (higher cost).',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABvM4GawAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-TNR-004',title:'Confirm plan fee and implementation fee funding source',assignee:'Admin',priority:'medium',due:'2026-05-28',compliance:'No',status:'pending',desc:'Confirm how plan fee and implementation fee will be funded before SOA is finalised.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABvM4GawAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-TNR-005',title:'Obtain Natasha\'s QSuper portfolio report for audit purposes',assignee:'Admin',priority:'high',due:'2026-05-27',compliance:'Yes',status:'pending',desc:'Required for file audit. Request QSuper portfolio report for Natasha.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABvM4GawAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-TNR-006',title:'Confirm risk profiles: Tim = Growth, Natasha = Balanced, Investment portfolio = Growth (not High Growth)',assignee:'JR',priority:'medium',due:'2026-05-27',compliance:'Yes',status:'pending',desc:'Confirm risk profile selections before SOA is written.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABvM4GawAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'}
+  ]},
+  { ref:'Chris & Lisa Deer', email:'', stage:'Implementation', isNew:false, completedAt:null, tasks:[
+    {id:'SC-CLD-001',title:'Get certificate of currency from Aware Super for ART insurance application',assignee:'Ann',priority:'high',due:'2026-05-26',compliance:'Yes',status:'pending',desc:'Required before switching insurance application from Aware to ART.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oY%2FAAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-CLD-002',title:'Change Chris\'s insurance application from AWARE Super to ART Super — use specific form (Maricel has it)',assignee:'Maricel',priority:'high',due:'2026-05-26',compliance:'Yes',status:'pending',desc:'Maricel holds the specific form required. Switch insurance application from AWARE to ART.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oY%2FAAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-CLD-003',title:'Rollover entire super from AWARE to ART — PARK until insurances are transferred',assignee:'Ann',priority:'high',due:'2026-06-05',compliance:'Yes',status:'pending',desc:'Do NOT rollover until insurance transfer is confirmed. Park this task until then.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oY%2FAAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-CLD-004',title:'Send NOI to Chris once contributions made into ART account — PARK',assignee:'Ann',priority:'medium',due:'2026-06-05',compliance:'Yes',status:'pending',desc:'Notice of Intent to claim deduction. Send once contributions land in ART. Park until ready.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oY%2FAAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-CLD-005',title:'Confirm Lisa insurance advice: transfer existing insurances in Aware Super to ART via Insurance Transfer Form',assignee:'Maricel',priority:'high',due:'2026-05-27',compliance:'Yes',status:'pending',desc:'Complete Insurance Transfer Form to move Lisa\'s existing Aware Super insurances across to ART.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oY%2FAAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'}
+  ]},
+  { ref:'Luke & Sharelle Mirtschin', email:'', stage:'Second Meeting', isNew:false, completedAt:null, tasks:[
+    {id:'SC-LSM-001',title:'Save all received documents to SharePoint and iC2 — Luke & Sharelle super statements, P&L (WHM business), driver\'s licences',assignee:'Maricel',priority:'high',due:'2026-05-26',compliance:'Yes',status:'pending',desc:'Note: Sharelle\'s super statement received is NOT most recent. Luke\'s licence renewal pending — has confirmation letter (acceptable).',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABvM4GaQAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-LSM-002',title:'Send Third-Party Authority to Luke & Sharelle via Annature — once super statements are saved',assignee:'Ann',priority:'high',due:'2026-05-27',compliance:'Yes',status:'pending',desc:'Do not send until documents are saved in SharePoint and iC2 first.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABvM4GaQAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'}
+  ]},
+  { ref:'Matthew Dewhurst', email:'', stage:'Advice Meeting', isNew:false, completedAt:null, tasks:[
+    {id:'SC-MDW-001',title:'Submit Acenda insurance application — NO medicals required (head injury 10 years ago, full recovery)',assignee:'Maricel',priority:'high',due:'2026-05-26',compliance:'Yes',status:'pending',desc:'Pre-assessment from Acenda confirms no medicals needed. Submit full application promptly — pre-assessment valid 30 days.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oY%2FgAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-MDW-002',title:'DO NOT provide OnePath medical decisions to Acenda or any other insurer — Kerrod\'s instruction',assignee:'Maricel',priority:'high',due:'2026-05-26',compliance:'Yes',status:'pending',desc:'CRITICAL: OnePath medical decisions must NOT be disclosed to Acenda or any other insurer. Kerrod\'s direct instruction.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oY%2FgAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-MDW-003',title:'Answer "Yes" to receiving pre-assessment on Acenda application form — attach pre-assessment email with application',assignee:'Maricel',priority:'high',due:'2026-05-26',compliance:'No',status:'pending',desc:'Include the pre-assessment email as an attachment with the submitted application.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oY%2FgAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'},
+    {id:'SC-MDW-004',title:'Pre-assessment from Acenda valid 30 days — submit full application promptly',assignee:'Maricel',priority:'high',due:'2026-05-26',compliance:'No',status:'pending',desc:'Time-sensitive: pre-assessment expires. Do not delay submission.',link:'https://outlook.office365.com/owa/?ItemID=AQMkADVkNjU3NTFlLTQ4ZTctNGZlNC1iN2VhLTViNzZjMTQ2MmI2ZQBGAAAD1iGlyGWl3EqaUr6kqEnD4AcATunzTVi%2BSU%2BAb0y5FuLIAQAAAgEJAAAATunzTVi%2BSU%2BAb0y5FuLIAQABv3oY%2FgAAAA%3D%3D&exvsurl=1&viewmodel=ReadMessageItem'}
+  ]}
+];
+
+// Merges SEED_CLIENTS into cmap — skips any client whose ref already exists
+function seedRealClients() {
+  let added = 0;
+  SEED_CLIENTS.forEach(cl => {
+    if (!cmap.has(cl.ref)) {
+      cmap.set(cl.ref, {
+        ref: cl.ref, email: cl.email || '', stage: cl.stage || 'Discovery',
+        isNew: false,
+        tasks: cl.tasks.map(t => ({
+          id:         t.id || uid(),
+          title:      t.title || '',
+          assignee:   t.assignee || '',
+          priority:   (t.priority || 'medium').toLowerCase(),
+          due:        t.due || '',
+          compliance: t.compliance || 'No',
+          status:     t.status || 'pending',
+          desc:       t.desc || '',
+          link:       t.link || ''
+        }))
+      });
+      if (cl.completedAt) completedAt.set(cl.ref, cl.completedAt);
+      added++;
+    }
+  });
+  return added;
+}
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let cmap = new Map();
+let sortables = [];
+let compOnly  = false;
+let addingTask    = new Set();
+let editingClient = new Set();
+let currentView   = 'pipeline';
+let completedAt   = new Map();
+let _saveTimer    = null;
+let _isSampleData = false;
+
+// ═══════════════════════════════════════════════════════
+// DATE UTILS
+// ═══════════════════════════════════════════════════════
+const TODAY = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
+function daysUntil(ds) {
+  if (!ds) return null;
+  const d = new Date(ds); d.setHours(0,0,0,0);
+  return Math.round((d - TODAY) / 86400000);
+}
+function shortDate(ds) {
+  if (!ds) return '';
+  const [y,m,d] = ds.split('-');
+  return (d && m) ? `${d}/${m}` : ds;
+}
+function addDays(n) {
+  const d = new Date(TODAY); d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0,10);
+}
+function dueBadgeHtml(ds, status) {
+  if (status === 'completed') return '';
+  const n = daysUntil(ds);
+  if (n === null || !ds) return '';
+  if (n < 0)  return `<span class="bdg bd ov">${shortDate(ds)} ⚠</span>`;
+  if (n === 0) return `<span class="bdg bd td">Today!</span>`;
+  if (n <= 3)  return `<span class="bdg bd sn">${shortDate(ds)} (${n}d)</span>`;
+  return `<span class="bdg bd">${shortDate(ds)}</span>`;
+}
+function uid() { return 'T-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2,5).toUpperCase(); }
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ═══════════════════════════════════════════════════════
+// STORAGE — SERIALISE / DESERIALISE
+// ═══════════════════════════════════════════════════════
+function serialiseState() {
+  const clients = [];
+  cmap.forEach(cl => clients.push({
+    ref: cl.ref, email: cl.email, stage: cl.stage, isNew: cl.isNew || false,
+    completedAt: completedAt.get(cl.ref) || null,
+    tasks: cl.tasks
+  }));
+  return { version: 2, lastModified: new Date().toISOString(), clients };
+}
+
+function deserialiseState(data) {
+  if (!data || !Array.isArray(data.clients)) return false;
+  const nm = new Map();
+  completedAt.clear();
+  data.clients.forEach(cl => {
+    nm.set(cl.ref, {
+      ref: cl.ref, email: cl.email || '', stage: cl.stage || 'Discovery', isNew: cl.isNew || false,
+      tasks: (cl.tasks || []).map(t => ({
+        id:         t.id || uid(),
+        title:      t.title || '',
+        assignee:   t.assignee || '',
+        priority:   (t.priority || 'medium').toLowerCase(),
+        due:        t.due || '',
+        compliance: t.compliance || 'No',
+        status:     t.status || 'pending',
+        desc:       t.desc || '',
+        link:       t.link || ''
+      }))
+    });
+    if (cl.completedAt) completedAt.set(cl.ref, cl.completedAt);
+  });
+  cmap = nm;
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════
+// SAVE — localStorage first, then cloud
+// ═══════════════════════════════════════════════════════
+function saveData() {
+  if (_isSampleData) return;
+  const state = serialiseState();
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+  setSaveStatus('Saving…', 'busy');
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => syncToCloud(state), 1200);
+}
+
+async function syncToCloud(state) {
+  if (!BIN_ID || !BIN_KEY) { setSaveStatus('Saved locally ✓', 'ok'); return; }
+  try {
+    const r = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': BIN_KEY,
+        'X-Bin-Versioning': 'false'
+      },
+      body: JSON.stringify(state)
+    });
+    setSaveStatus(r.ok ? 'Synced ✓' : 'Saved (sync error)', r.ok ? 'ok' : 'err');
+  } catch(e) { setSaveStatus('Saved locally ✓', 'ok'); }
+}
+
+// ═══════════════════════════════════════════════════════
+// LOAD — cloud first, fallback to localStorage, fallback to sample
+// ═══════════════════════════════════════════════════════
+async function loadData() {
+  setSaveStatus('Loading…', 'busy');
+  let loaded = false;
+
+  if (BIN_ID && BIN_KEY) {
+    try {
+      const r = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+        headers: { 'X-Master-Key': BIN_KEY }
+      });
+      if (r.ok) {
+        const d = await r.json();
+        if (d.record && d.record.clients) {
+          loaded = deserialiseState(d.record);
+          if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify(d.record));
+        }
+      }
+    } catch(e) {}
+  }
+
+  if (!loaded) {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try { loaded = deserialiseState(JSON.parse(raw)); } catch(e) {}
+    }
+  }
+
+  if (!loaded || cmap.size === 0) {
+    deserialiseState(SAMPLE_DATA);
+    _isSampleData = true;
+  }
+
+  const seeded = seedRealClients();
+  if (seeded > 0) {
+    _isSampleData = false;
+    saveData();
+  }
+
+  rebuildAssigneeFilter();
+  render();
+  hideLoad();
+  setSaveStatus(_isSampleData ? 'Demo data — add a real client to start' : (BIN_ID ? 'Synced ✓' : 'Saved locally ✓'), _isSampleData ? 'err' : 'ok');
+}
+
+// ═══════════════════════════════════════════════════════
+// EXPORT BACKUP
+// ═══════════════════════════════════════════════════════
+function exportBackup() {
+  const json = JSON.stringify(serialiseState(), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tenex-pipeline-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  toast('Backup downloaded ✓', 'tg');
+}
+
+// ═══════════════════════════════════════════════════════
+// IMPORT FROM CLAUDE
+// ═══════════════════════════════════════════════════════
+function openImport() {
+  document.getElementById('importText').value = '';
+  document.getElementById('importPreview').style.display = 'none';
+  document.getElementById('importPreview').innerHTML = '';
+  document.getElementById('importConfirmBtn').disabled = true;
+  document.getElementById('ovImport').classList.remove('h');
+  setTimeout(() => document.getElementById('importText').focus(), 100);
+}
+function closeImport() { document.getElementById('ovImport').classList.add('h'); }
+
+function previewImport() {
+  const raw = document.getElementById('importText').value.trim();
+  const preview = document.getElementById('importPreview');
+  if (!raw) { preview.style.display = 'none'; return; }
+  try {
+    const tasks = JSON.parse(raw);
+    if (!Array.isArray(tasks)) throw new Error('Expected a JSON array [ ... ]');
+    const groups = {};
+    tasks.forEach(t => {
+      const ref = (t.client_reference || t.clientReference || t['Client Reference'] || 'Unassigned').trim();
+      if (!groups[ref]) groups[ref] = [];
+      groups[ref].push(t);
+    });
+    const html = Object.entries(groups).map(([ref, ts]) => `
+      <div class="import-group">
+        <div class="import-ref">${esc(ref)}
+          <span class="import-count">${ts.length} task${ts.length!==1?'s':''}</span>
+        </div>
+        ${ts.map(t => `<div class="import-task">
+          <span class="bdg b${((t.priority||'m')[0])}">${t.priority||'medium'}</span>
+          ${t.compliance_flag ? '<span class="bdg bc">⚑</span>' : ''}
+          ${esc(t.title)}
+        </div>`).join('')}
+      </div>`).join('');
+    preview.innerHTML = html;
+    preview.style.display = 'block';
+    document.getElementById('importConfirmBtn').disabled = false;
+  } catch(e) {
+    preview.innerHTML = `<p style="color:var(--red);font-size:12px;padding:4px">⚠ ${esc(e.message)}</p>`;
+    preview.style.display = 'block';
+    document.getElementById('importConfirmBtn').disabled = true;
+  }
+}
+
+function confirmImport() {
+  const raw = document.getElementById('importText').value.trim();
+  try {
+    const tasks = JSON.parse(raw);
+    const grouped = {};
+    tasks.forEach(t => {
+      const ref = (t.client_reference || t.clientReference || t['Client Reference'] || 'Unassigned').trim();
+      if (!grouped[ref]) grouped[ref] = [];
+      grouped[ref].push(t);
+    });
+    let added = 0, newClients = 0;
+    Object.entries(grouped).forEach(([ref, ts]) => {
+      if (!cmap.has(ref)) {
+        cmap.set(ref, { ref, email: '', stage: 'Discovery', isNew: true, tasks: [] });
+        newClients++;
+      }
+      const cl = cmap.get(ref);
+      ts.forEach(t => {
+        if (cl.tasks.some(x => x.title.trim().toLowerCase() === (t.title||'').trim().toLowerCase())) return;
+        cl.tasks.push({
+          id:         t.task_id || uid(),
+          title:      t.title || '',
+          assignee:   t.assignee || 'Admin',
+          priority:   (t.priority || 'medium').toLowerCase(),
+          due:        t.due_date || t.due || '',
+          compliance: (t.compliance_flag || t.compliance === 'Yes') ? 'Yes' : 'No',
+          status:     'pending',
+          desc:       t.description || t.desc || '',
+          link:       t.email_link || t.link || ''
+        });
+        added++;
+      });
+    });
+    if (_isSampleData) { _isSampleData = false; }
+    saveData();
+    rebuildAssigneeFilter();
+    render();
+    closeImport();
+    toast(`✓ ${added} task${added!==1?'s':''} added across ${Object.keys(grouped).length} client${Object.keys(grouped).length!==1?'s':''}`, 'tg');
+  } catch(e) { toast('Import failed: ' + e.message, 'tr'); }
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════
+function applyFilters() { render(); }
+
+function getFiltered() {
+  const q  = (document.getElementById('qSearch')?.value||'').toLowerCase();
+  const fa = document.getElementById('fAssignee')?.value||'';
+  const fp = document.getElementById('fPriority')?.value||'';
+  const fs = document.getElementById('fStatus')?.value||'';
+  const fd = document.getElementById('fDue')?.value||'';
+  const out = new Map();
+  cmap.forEach((cl, ref) => {
+    const nameHit = ref.toLowerCase().includes(q) || cl.email.toLowerCase().includes(q);
+    let tasks = cl.tasks;
+    if (q && !nameHit) tasks = tasks.filter(t => t.title.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q));
+    if (fa) tasks = tasks.filter(t => t.assignee === fa);
+    if (fp) tasks = tasks.filter(t => t.priority === fp);
+    if (fs) tasks = tasks.filter(t => t.status === fs);
+    if (fd) tasks = tasks.filter(t => !t.due || t.due <= fd);
+    if (compOnly) tasks = tasks.filter(t => t.compliance === 'Yes');
+    if (!tasks.length && (q||fa||fp||fs||fd||compOnly)) return;
+    out.set(ref, { ...cl, tasks: (q||fa||fp||fs||fd||compOnly) ? tasks : cl.tasks });
+  });
+  return out;
+}
+
+function render() {
+  if (currentView === 'completed') { renderCompleted(); return; }
+  const board = document.getElementById('kboard');
+  const filtered = getFiltered();
+  board.innerHTML = STAGES.map(stage => {
+    const m = SM[stage];
+    const clients = [...filtered.values()].filter(c => c.stage === stage);
+    return `
+<div class="kcol" data-stage="${stage}">
+  <div class="col-head" style="border-bottom-color:${m.color}">
+    <div class="col-head-left">
+      <div class="col-dot" style="background:${m.color}"></div>
+      <span class="col-title">${m.emoji} ${stage}</span>
+    </div>
+    <span class="col-badge" style="background:${m.light};color:${m.color}" id="cc-${stage.replace(/ /g,'-')}">${clients.length}</span>
+  </div>
+  <div class="col-cards" data-stage="${stage}">
+    ${clients.length
+      ? clients.map(c => cardHtml(c, m)).join('')
+      : `<div class="col-empty">${m.emoji}<br>No clients here<br><small>Drag a card to move</small></div>`}
+  </div>
+</div>`;
+  }).join('');
+  initSortable();
+  updateStats(filtered);
+  updateTabCounts();
+}
+
+function cardHtml(cl, m) {
+  const rk   = cl.ref.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
+  const tasks = cl.tasks;
+  const done  = tasks.filter(t => t.status === 'completed').length;
+  const total = tasks.length;
+  const pct   = total ? Math.round((done/total)*100) : 0;
+  const C     = 2 * Math.PI * 15;
+  const offset = C - (pct/100) * C;
+  const ringColor = pct === 100 ? '#10b981' : (pct >= 50 ? '#f59e0b' : '#3b82f6');
+  const hasOv   = tasks.some(t => t.status !== 'completed' && daysUntil(t.due) < 0);
+  const hasComp = tasks.some(t => t.compliance === 'Yes' && t.status !== 'completed');
+  const isEditing = editingClient.has(cl.ref);
+  return `
+<div class="ccard" data-ref="${esc(cl.ref)}">
+  <div class="card-strip" style="background:${m.color}"></div>
+  ${isEditing ? `
+  <div class="edit-form">
+    <div class="edit-form-row">
+      <span class="ef-lbl">Name</span>
+      <input class="ef-inp" type="text" id="ef-n-${rk}" value="${esc(cl.ref)}" placeholder="Client name…" autocomplete="off">
+    </div>
+    <div class="edit-form-row">
+      <span class="ef-lbl">Email</span>
+      <input class="ef-inp" type="email" id="ef-e-${rk}" value="${esc(cl.email)}" placeholder="email@example.com">
+    </div>
+    <div class="edit-form-row" style="justify-content:flex-end;gap:6px">
+      <button class="btn btn-ghost ef-cancel" data-ref="${esc(cl.ref)}" style="padding:4px 9px;font-size:11px">Cancel</button>
+      <button class="btn btn-primary ef-save" data-ref="${esc(cl.ref)}" style="padding:4px 11px;font-size:11px">Save</button>
+    </div>
+  </div>` : ''}
+  <div class="card-top">
+    <div style="flex:1;min-width:0">
+      <div class="card-name">${esc(cl.ref)}${hasOv?' <span style="color:#ef4444;font-size:11px">⚠</span>':''}${hasComp?' <span style="color:#3b82f6;font-size:11px">⚑</span>':''}</div>
+      ${cl.email ? `<div class="card-email">${esc(cl.email)}</div>` : ''}
+    </div>
+    <div class="card-meta-right">
+      <div class="progress-ring-wrap" title="${done}/${total} tasks done">
+        <svg width="36" height="36" viewBox="0 0 36 36">
+          <circle class="prog-bg" cx="18" cy="18" r="15"/>
+          <circle class="prog-fg" cx="18" cy="18" r="15" stroke="${ringColor}" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${offset.toFixed(1)}"/>
+        </svg>
+        <div class="ring-text">${pct}%</div>
+      </div>
+      <div style="display:flex;gap:2px">
+        <button class="edit-client-btn" data-ref="${esc(cl.ref)}" title="Edit name / email">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="card-del-btn" data-ref="${esc(cl.ref)}" title="Remove client">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="card-tasks">
+    ${tasks.map(t => taskRowHtml(t, cl.ref)).join('')}
+  </div>
+  <div class="card-foot">
+    <div class="pbar-wrap">
+      <div class="pbar"><div class="pfill" style="width:${pct}%;background:${ringColor}"></div></div>
+      <span class="ptext">${done}/${total}</span>
+    </div>
+    ${pct === 100 && total > 0
+      ? `<button class="mark-complete-btn" data-ref="${esc(cl.ref)}">&#x2705; Mark Complete</button>`
+      : (cl.isNew ? '<span class="new-pill">NEW ✦</span>' : '')}
+  </div>
+  <div class="add-task-section">
+    ${addingTask.has(cl.ref) ? `
+    <div class="atform">
+      <input class="at-input" type="text" id="at-t-${rk}" placeholder="Task description…" autocomplete="off">
+      <div class="at-row">
+        <select class="at-sel" id="at-p-${rk}">
+          <option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option>
+        </select>
+        <input class="at-date" type="date" id="at-d-${rk}">
+        <input class="at-who" type="text" id="at-a-${rk}" placeholder="Assignee…">
+      </div>
+      <div class="at-row">
+        <label class="at-comp"><input type="checkbox" id="at-c-${rk}"> Compliance flag</label>
+        <button class="btn btn-ghost at-cancel" data-ref="${esc(cl.ref)}" style="padding:4px 9px;font-size:11px">Cancel</button>
+        <button class="btn btn-green at-save" data-ref="${esc(cl.ref)}" style="padding:4px 11px;font-size:11px">+ Add</button>
+      </div>
+    </div>` : `
+    <button class="add-task-btn" data-ref="${esc(cl.ref)}">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add task for this client
+    </button>`}
+  </div>
+</div>`;
+}
+
+function taskRowHtml(task, ref) {
+  const done = task.status === 'completed';
+  return `
+<div class="trow${done?' done':''}">
+  <input class="tcb" type="checkbox" ${done?'checked':''} data-ref="${esc(ref)}" data-id="${esc(task.id)}" onclick="event.stopPropagation()" onchange="toggleTask(this)">
+  <div class="tbody">
+    <div class="ttitle">${esc(task.title)}</div>
+    <div class="tmeta">
+      <span class="bdg b${task.priority[0]}">${task.priority}</span>
+      ${task.compliance==='Yes' ? '<span class="bdg bc">⚑ Compliance</span>' : ''}
+      ${dueBadgeHtml(task.due, task.status)}
+      ${task.assignee ? `<span class="bdg ba">${esc(task.assignee)}</span>` : ''}
+    </div>
+  </div>
+  <button class="task-del-btn" data-ref="${esc(ref)}" data-id="${esc(task.id)}" title="Delete task">&#x2715;</button>
+</div>`;
+}
+
+function updateStats(filtered) {
+  const all   = [...(filtered||cmap).values()];
+  const tasks = all.flatMap(c => c.tasks);
+  document.getElementById('sTot').textContent  = all.length;
+  document.getElementById('sOb').textContent   = all.filter(c => c.stage==='Discovery').length;
+  document.getElementById('sPend').textContent = tasks.filter(t => t.status!=='completed').length;
+  document.getElementById('sOv').textContent   = tasks.filter(t => t.status!=='completed' && daysUntil(t.due)<0).length;
+  document.getElementById('sCo').textContent   = tasks.filter(t => t.compliance==='Yes' && t.status!=='completed').length;
+  document.getElementById('sDone').textContent = tasks.filter(t => t.status==='completed').length;
+}
+
+// ═══════════════════════════════════════════════════════
+// DRAG & DROP
+// ═══════════════════════════════════════════════════════
+function initSortable() {
+  sortables.forEach(s => { try { s.destroy(); } catch(e){} });
+  sortables = [];
+  if (typeof Sortable === 'undefined') return;
+  document.querySelectorAll('.col-cards').forEach(el => {
+    const s = Sortable.create(el, {
+      group: 'pipeline', animation: 180, easing: 'cubic-bezier(.25,.1,.25,1)',
+      ghostClass: 'sortable-ghost', chosenClass: 'sortable-chosen', dragClass: 'sortable-drag',
+      draggable: '.ccard', filter: '.tcb,.trow,.card-foot', preventOnFilter: false,
+      onStart() { el.classList.add('drag-over'); },
+      onEnd(evt) {
+        document.querySelectorAll('.col-cards').forEach(c => c.classList.remove('drag-over'));
+        const ref = evt.item.dataset.ref;
+        const newStage = evt.to.dataset.stage;
+        const oldStage = evt.from.dataset.stage;
+        if (ref && newStage && newStage !== oldStage) stageMove(ref, newStage, oldStage);
+        updateColCounts();
+      }
+    });
+    sortables.push(s);
+  });
+}
+
+function stageMove(ref, newStage, oldStage) {
+  const cl = cmap.get(ref);
+  if (!cl) return;
+  cl.stage = newStage;
+  saveData();
+  toast(`${ref} → ${newStage}`, 'tg');
+  updateColCounts();
+  updateStats(getFiltered());
+}
+
+function updateColCounts() {
+  STAGES.forEach(s => {
+    const n = document.querySelectorAll(`.col-cards[data-stage="${s}"] .ccard`).length;
+    const el = document.getElementById('cc-' + s.replace(/ /g,'-'));
+    if (el) el.textContent = n;
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// TASK COMPLETION
+// ═══════════════════════════════════════════════════════
+function toggleTask(cb) {
+  const ref = cb.dataset.ref, taskId = cb.dataset.id;
+  const cl  = cmap.get(ref); if (!cl) return;
+  const task = cl.tasks.find(t => t.id === taskId); if (!task) return;
+  task.status = cb.checked ? 'completed' : 'pending';
+  saveData();
+  const row = cb.closest('.trow');
+  if (row) {
+    row.classList.toggle('done', task.status === 'completed');
+    const title = row.querySelector('.ttitle');
+    if (title) { title.style.textDecoration = task.status==='completed'?'line-through':''; title.style.color = task.status==='completed'?'var(--muted)':''; }
+  }
+  const card = document.querySelector(`.ccard[data-ref="${CSS.escape(ref)}"]`);
+  if (card) refreshCardProgress(card, cl);
+  updateStats(getFiltered());
+  toast(task.status==='completed' ? '&#x2713; Task complete' : '&#x21BA; Task reopened', task.status==='completed'?'tg':'');
+}
+
+function refreshCardProgress(cardEl, cl) {
+  const done = cl.tasks.filter(t => t.status==='completed').length;
+  const total = cl.tasks.length;
+  const pct   = total ? Math.round((done/total)*100) : 0;
+  const C     = 2 * Math.PI * 15;
+  const offset = C - (pct/100)*C;
+  const rc    = pct===100?'#10b981':(pct>=50?'#f59e0b':'#3b82f6');
+  const fg = cardEl.querySelector('.prog-fg');
+  if (fg) { fg.style.strokeDashoffset=offset.toFixed(1); fg.setAttribute('stroke',rc); }
+  const rt = cardEl.querySelector('.ring-text'); if (rt) rt.textContent = pct+'%';
+  const pf = cardEl.querySelector('.pfill'); if (pf) { pf.style.width=pct+'%'; pf.style.background=rc; }
+  const pt = cardEl.querySelector('.ptext'); if (pt) pt.textContent=`${done}/${total}`;
+  const foot = cardEl.querySelector('.card-foot');
+  if (foot && pct===100 && total>0) {
+    let btn = foot.querySelector('.mark-complete-btn');
+    if (!btn) { btn = document.createElement('button'); btn.className='mark-complete-btn'; btn.dataset.ref=cl.ref; btn.innerHTML='&#x2705; Mark Complete'; foot.appendChild(btn); }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// ONBOARD NEW CLIENT
+// ═══════════════════════════════════════════════════════
+function openOnboard()  { document.getElementById('ovOnboard').classList.remove('h'); document.getElementById('ncName').focus(); }
+function closeOnboard() {
+  document.getElementById('ovOnboard').classList.add('h');
+  ['ncName','ncEmail','ncAssignee'].forEach(id => { document.getElementById(id).value=''; });
+}
+
+function createClient() {
+  const name     = document.getElementById('ncName').value.trim();
+  const email    = document.getElementById('ncEmail').value.trim();
+  const assignee = document.getElementById('ncAssignee').value.trim() || 'Admin';
+  if (!name) { toast('Client name is required', 'tr'); return; }
+  if (cmap.has(name)) { toast(`"${name}" already exists`, 'ta'); return; }
+  const tasks = OB_TASKS.map((ob,i) => ({
+    id: `OB-${name.replace(/\s+/g,'-').toUpperCase().slice(0,10)}-${String(i+1).padStart(2,'0')}`,
+    title: ob.title, assignee, priority: ob.priority, due: addDays(ob.days),
+    compliance: ob.compliance, status: 'pending', desc: '', link: ''
+  }));
+  if (_isSampleData) { cmap.clear(); completedAt.clear(); _isSampleData = false; }
+  cmap.set(name, { ref:name, email, stage:'Discovery', tasks, isNew:true });
+  saveData();
+  rebuildAssigneeFilter();
+  closeOnboard();
+  render();
+  toast(`&#x2713; ${name} added to Discovery`, 'tg');
+  document.querySelector('.kcol[data-stage="Discovery"]')?.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'start' });
+}
+
+// ═══════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════
+function openSettings() {
+  document.getElementById('sBinId').value  = BIN_ID;
+  document.getElementById('sBinKey').value = BIN_KEY;
+  document.getElementById('ovSettings').classList.remove('h');
+}
+function closeSettings() { document.getElementById('ovSettings').classList.add('h'); }
+function saveSettings() {
+  BIN_ID  = document.getElementById('sBinId').value.trim();
+  BIN_KEY = document.getElementById('sBinKey').value.trim();
+  localStorage.setItem('tenex_bin_id',  BIN_ID);
+  localStorage.setItem('tenex_bin_key', BIN_KEY);
+  closeSettings();
+  toast('Settings saved. Syncing…', 'tb');
+  if (BIN_ID && BIN_KEY) syncToCloud(serialiseState());
+  else setSaveStatus('Saved locally ✓', 'ok');
+}
+
+function clearAllData() {
+  if (!confirm('Delete ALL clients and tasks? This cannot be undone.')) return;
+  cmap.clear(); completedAt.clear(); _isSampleData = false;
+  localStorage.removeItem(STORAGE_KEY);
+  saveData();
+  render();
+  closeSettings();
+  toast('Pipeline cleared', 'ta');
+}
+
+// ═══════════════════════════════════════════════════════
+// DELETE TASK / CLIENT
+// ═══════════════════════════════════════════════════════
+function deleteTask(ref, taskId) {
+  const cl = cmap.get(ref); if (!cl) return;
+  const task = cl.tasks.find(t => t.id === taskId); if (!task) return;
+  if (!confirm(`Delete task?\n\n"${task.title}"`)) return;
+  cl.tasks = cl.tasks.filter(t => t.id !== taskId);
+  saveData(); render();
+  toast('Task deleted', '');
+}
+
+function confirmDeleteClient(ref) {
+  const cl = cmap.get(ref); if (!cl) return;
+  if (!confirm(`Remove "${ref}" from the pipeline?\n\nThis deletes all their tasks from this board.`)) return;
+  cmap.delete(ref); addingTask.delete(ref); editingClient.delete(ref); completedAt.delete(ref);
+  saveData(); render();
+  toast(`${ref} removed`, '');
+}
+
+// ═══════════════════════════════════════════════════════
+// ADD TASK INLINE
+// ═══════════════════════════════════════════════════════
+function toggleAddTask(ref) {
+  addingTask.has(ref) ? addingTask.delete(ref) : addingTask.add(ref);
+  render();
+  if (addingTask.has(ref)) {
+    const rk = ref.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
+    setTimeout(() => document.getElementById(`at-t-${rk}`)?.focus(), 60);
+  }
+}
+
+function submitNewTask(ref) {
+  const rk  = ref.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
+  const title = (document.getElementById(`at-t-${rk}`)?.value||'').trim();
+  if (!title) { toast('Please enter a task description', 'tr'); return; }
+  const cl = cmap.get(ref); if (!cl) return;
+  cl.tasks.push({
+    id: uid(), title, assignee: (document.getElementById(`at-a-${rk}`)?.value||'').trim(),
+    priority: document.getElementById(`at-p-${rk}`)?.value||'medium',
+    due: document.getElementById(`at-d-${rk}`)?.value||'',
+    compliance: document.getElementById(`at-c-${rk}`)?.checked ? 'Yes' : 'No',
+    status: 'pending', desc: '', link: ''
+  });
+  saveData(); addingTask.delete(ref); rebuildAssigneeFilter(); render();
+  toast(`&#x2713; Task added to ${ref}`,
