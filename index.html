@@ -1395,15 +1395,35 @@ function openSettings() {
   document.getElementById('ovSettings').classList.remove('h');
 }
 function closeSettings() { document.getElementById('ovSettings').classList.add('h'); }
-function saveSettings() {
+async function saveSettings() {
   BIN_ID  = document.getElementById('sBinId').value.trim();
   BIN_KEY = document.getElementById('sBinKey').value.trim();
   localStorage.setItem('tenex_bin_id',  BIN_ID);
   localStorage.setItem('tenex_bin_key', BIN_KEY);
   closeSettings();
-  toast('Settings saved. Syncing…', 'tb');
-  if (BIN_ID && BIN_KEY) syncToCloud(serialiseState());
-  else setSaveStatus('Saved locally ✓', 'ok');
+  if (!BIN_ID || !BIN_KEY) { setSaveStatus('Saved locally', 'ok'); return; }
+  setSaveStatus('Connecting…', 'busy');
+  toast('Connecting to cloud…', 'tb');
+  try {
+    const r = await fetch('https://api.jsonbin.io/v3/b/' + BIN_ID + '/latest', {
+      headers: { 'X-Master-Key': BIN_KEY }
+    });
+    if (r.ok) {
+      const d = await r.json();
+      if (d.record && Array.isArray(d.record.clients) && d.record.clients.length > 0 && !d.record._isSample) {
+        deserialiseState(d.record);
+        _isSampleData = false;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(d.record));
+        rebuildAssigneeFilter();
+        render();
+        setSaveStatus('Synced from cloud', 'ok');
+        toast('Cloud data loaded — pipeline updated', 'tg');
+        return;
+      }
+    }
+  } catch(e) {}
+  syncToCloud(serialiseState());
+  toast('Settings saved — data pushed to cloud', 'tg');
 }
 
 function clearAllData() {
