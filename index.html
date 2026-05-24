@@ -860,7 +860,7 @@ function dueBadgeHtml(ds, status) {
   if (status === 'completed') return '';
   const n = daysUntil(ds);
   if (n === null || !ds) return '';
-  if (n < 0)  return `<span class="bdg bd ov">${shortDate(ds)} ⚠</span>`;
+  if (n < 0)  return `<span class="bdg bd od">${shortDate(ds)} ⚠</span>`;
   if (n === 0) return `<span class="bdg bd td">Today!</span>`;
   if (n <= 3)  return `<span class="bdg bd sn">${shortDate(ds)} (${n}d)</span>`;
   return `<span class="bdg bd">${shortDate(ds)}</span>`;
