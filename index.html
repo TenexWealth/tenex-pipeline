@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- v2.2 - auto-deploy live -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -909,7 +910,7 @@ function deserialiseState(data) {
 // SAVE — localStorage first, then cloud
 // ═══════════════════════════════════════════════════════
 function saveData() {
-  if (_isSampleData) return;
+  if (_isSampleData) return; // don't overwrite with demo data
   const state = serialiseState();
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
   setSaveStatus('Saving…', 'busy');
@@ -934,49 +935,64 @@ async function syncToCloud(state) {
 }
 
 // ═══════════════════════════════════════════════════════
-// LOAD — cloud first, fallback to localStorage, fallback to sample
+// LOAD — cloud first (most recent), fallback to localStorage, fallback to sample
 // ═══════════════════════════════════════════════════════
 async function loadData() {
   setSaveStatus('Loading…', 'busy');
-  let loaded = false;
+  let statusMsg   = 'Saved locally ✓';
+  let statusState = 'ok';
+  try {
+    let loaded = false;
 
-  if (BIN_ID && BIN_KEY) {
-    try {
-      const r = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-        headers: { 'X-Master-Key': BIN_KEY }
-      });
-      if (r.ok) {
-        const d = await r.json();
-        if (d.record && d.record.clients) {
-          loaded = deserialiseState(d.record);
-          if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify(d.record));
+    // 1. Try cloud (most current if multi-device)
+    if (BIN_ID && BIN_KEY) {
+      try {
+        const r = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
+          headers: { 'X-Master-Key': BIN_KEY }
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.record && d.record.clients) {
+            loaded = deserialiseState(d.record);
+            if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify(d.record));
+          }
         }
-      }
-    } catch(e) {}
-  }
-
-  if (!loaded) {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      try { loaded = deserialiseState(JSON.parse(raw)); } catch(e) {}
+      } catch(e) { /* fall through */ }
     }
-  }
 
-  if (!loaded || cmap.size === 0) {
-    deserialiseState(SAMPLE_DATA);
-    _isSampleData = true;
-  }
+    // 2. Try localStorage
+    if (!loaded) {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        try { loaded = deserialiseState(JSON.parse(raw)); } catch(e) {}
+      }
+    }
 
-  const seeded = seedRealClients();
-  if (seeded > 0) {
-    _isSampleData = false;
-    saveData();
-  }
+    // 3. Use sample data
+    if (!loaded || cmap.size === 0) {
+      deserialiseState(SAMPLE_DATA);
+      _isSampleData = true;
+    }
 
-  rebuildAssigneeFilter();
-  render();
-  hideLoad();
-  setSaveStatus(_isSampleData ? 'Demo data — add a real client to start' : (BIN_ID ? 'Synced ✓' : 'Saved locally ✓'), _isSampleData ? 'err' : 'ok');
+    // 4. Seed real clients from emails (merged in — skips existing refs)
+    const seeded = seedRealClients();
+    if (seeded > 0) {
+      _isSampleData = false; // real clients present — save to storage
+      saveData();
+    }
+
+    rebuildAssigneeFilter();
+    render();
+    statusMsg   = _isSampleData ? 'Demo data — add a real client to start' : (BIN_ID ? 'Synced ✓' : 'Saved locally ✓');
+    statusState = _isSampleData ? 'err' : 'ok';
+  } catch(err) {
+    console.error('[Tenex Pipeline] loadData error:', err);
+    statusMsg   = 'Load error — see console (F12)';
+    statusState = 'err';
+  } finally {
+    hideLoad();
+    setSaveStatus(statusMsg, statusState);
+  }
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1332,6 +1348,7 @@ function refreshCardProgress(cardEl, cl) {
   const rt = cardEl.querySelector('.ring-text'); if (rt) rt.textContent = pct+'%';
   const pf = cardEl.querySelector('.pfill'); if (pf) { pf.style.width=pct+'%'; pf.style.background=rc; }
   const pt = cardEl.querySelector('.ptext'); if (pt) pt.textContent=`${done}/${total}`;
+  // Show/hide mark-complete button
   const foot = cardEl.querySelector('.card-foot');
   if (foot && pct===100 && total>0) {
     let btn = foot.querySelector('.mark-complete-btn');
@@ -1444,4 +1461,213 @@ function submitNewTask(ref) {
     status: 'pending', desc: '', link: ''
   });
   saveData(); addingTask.delete(ref); rebuildAssigneeFilter(); render();
-  toast(`&#x2713; Task added to ${ref}`,
+  toast(`&#x2713; Task added to ${ref}`, 'tg');
+}
+
+// ═══════════════════════════════════════════════════════
+// EDIT CLIENT NAME / EMAIL
+// ═══════════════════════════════════════════════════════
+function toggleEditClient(ref) {
+  editingClient.has(ref) ? editingClient.delete(ref) : editingClient.add(ref);
+  render();
+  if (editingClient.has(ref)) {
+    const rk = ref.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
+    setTimeout(() => document.getElementById(`ef-n-${rk}`)?.focus(), 60);
+  }
+}
+
+function saveClientEdit(ref) {
+  const rk       = ref.replace(/\s+/g,'-').replace(/[^a-zA-Z0-9-]/g,'');
+  const newName  = (document.getElementById(`ef-n-${rk}`)?.value||'').trim();
+  const newEmail = (document.getElementById(`ef-e-${rk}`)?.value||'').trim();
+  if (!newName) { toast('Client name cannot be empty', 'tr'); return; }
+  const cl = cmap.get(ref); if (!cl) return;
+  if (newName === ref && newEmail === cl.email) { editingClient.delete(ref); render(); return; }
+  const updated = { ...cl, ref: newName, email: newEmail };
+  cmap.delete(ref); cmap.set(newName, updated);
+  editingClient.delete(ref); addingTask.delete(ref);
+  if (completedAt.has(ref)) { completedAt.set(newName, completedAt.get(ref)); completedAt.delete(ref); }
+  saveData(); render();
+  toast('Client updated &#x2713;', 'tg');
+}
+
+// ═══════════════════════════════════════════════════════
+// COMPLETED VIEW
+// ═══════════════════════════════════════════════════════
+function renderCompleted() {
+  const grid = document.getElementById('compGrid'); if (!grid) return;
+  const completed = [...cmap.values()].filter(c =>
+    c.stage === 'Completed' || (c.tasks.length > 0 && c.tasks.every(t => t.status === 'completed'))
+  );
+  completed.forEach(c => { if (!completedAt.has(c.ref)) { completedAt.set(c.ref, new Date().toISOString()); saveData(); } });
+  if (!completed.length) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:60px 24px;color:var(--muted)">
+      <div style="font-size:52px;margin-bottom:14px">&#x2705;</div>
+      <div style="font-size:15px;font-weight:700;color:var(--navy)">No completed clients yet</div>
+      <div style="font-size:12px;margin-top:6px">Clients appear here when all tasks are done or when you click "Mark Complete".</div>
+    </div>`;
+  } else {
+    grid.innerHTML = completed.map(c => completedCardHtml(c)).join('');
+  }
+  updateTabCounts();
+}
+
+function completedCardHtml(cl) {
+  const ts = completedAt.get(cl.ref) || new Date().toISOString();
+  const daysAgo = Math.floor((Date.now() - new Date(ts).getTime()) / 86400000);
+  const isUrgent = daysAgo >= 7;
+  return `
+<div class="comp-card">
+  <div class="comp-strip"></div>
+  <div class="comp-head">
+    <div style="flex:1;min-width:0">
+      <div class="comp-name">${esc(cl.ref)}</div>
+      ${cl.email ? `<div class="comp-email">${esc(cl.email)}</div>` : ''}
+    </div>
+    <span class="comp-badge">&#x2705; Done</span>
+  </div>
+  <div class="comp-tasks">
+    ${cl.tasks.map(t => `<div class="trow done" style="cursor:default">
+      <span style="color:var(--green);font-size:12px;flex-shrink:0;margin-top:2px">&#x2713;</span>
+      <div class="tbody"><div class="ttitle">${esc(t.title)}</div>
+        ${t.assignee?`<div class="tmeta"><span class="bdg ba">${esc(t.assignee)}</span></div>`:''}
+      </div>
+    </div>`).join('')}
+  </div>
+  <div class="comp-foot">
+    <span class="comp-days">${daysAgo===0?'Completed today':`${daysAgo} day${daysAgo!==1?'s':''} ago`}</span>
+    <button class="compliance-btn${isUrgent?' urgent':''}" onclick="sendComplianceEmail('${esc(cl.ref).replace(/'/g,'\\&#39;')}')">
+      ${isUrgent?'&#x1F6A8; SEND Compliance Email':'&#x1F4CB; Send Compliance Email'}
+    </button>
+  </div>
+</div>`;
+}
+
+function moveToCompleted(ref) {
+  const cl = cmap.get(ref); if (!cl) return;
+  cl.stage = 'Completed';
+  if (!completedAt.has(ref)) completedAt.set(ref, new Date().toISOString());
+  saveData(); render(); updateTabCounts();
+  toast(`${ref} moved to Completed &#x2705;`, 'tg');
+}
+
+function sendComplianceEmail(ref) {
+  const cl = cmap.get(ref); if (!cl) return;
+  const tasks = cl.tasks.map(t => `  - ${t.title} (${t.assignee||'Admin'})`).join('\n');
+  const subject = `Compliance Checklist Required — ${ref}`;
+  const body = `Hi Emily,\n\nThis client has completed all onboarding tasks and requires a compliance review.\n\nClient: ${ref}\nEmail: ${cl.email||'N/A'}\n\nCompleted Tasks:\n${tasks}\n\nPlease complete the compliance checklist at your earliest convenience.\n\nKind regards,\nTenex Wealth`;
+  window.open(`mailto:emily@tenexwealth.com.au?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+  toast('&#x1F4CB; Compliance email draft opened', 'tg');
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB SWITCHING + COUNTS
+// ═══════════════════════════════════════════════════════
+function switchView(view) {
+  currentView = view;
+  document.getElementById('pipelineOuter').style.display = view==='pipeline' ? '' : 'none';
+  document.getElementById('compOuter').style.display     = view==='completed' ? '' : 'none';
+  document.getElementById('tabPipeline').classList.toggle('active', view==='pipeline');
+  document.getElementById('tabCompleted').classList.toggle('active', view==='completed');
+  view==='completed' ? renderCompleted() : render();
+}
+
+function updateTabCounts() {
+  const all = [...cmap.values()];
+  const comp = all.filter(c => c.stage==='Completed' || (c.tasks.length>0 && c.tasks.every(t=>t.status==='completed')));
+  const pipe = all.filter(c => c.stage!=='Completed' && !(c.tasks.length>0 && c.tasks.every(t=>t.status==='completed')));
+  const tc1 = document.getElementById('tcPipeline'); if (tc1) tc1.textContent = pipe.length;
+  const tc2 = document.getElementById('tcCompleted'); if (tc2) tc2.textContent = comp.length;
+}
+
+// ═══════════════════════════════════════════════════════
+// FILTERS
+// ═══════════════════════════════════════════════════════
+function toggleComp() {
+  compOnly = !compOnly;
+  document.getElementById('compBtn').classList.toggle('on', compOnly);
+  render();
+}
+function clearFilters() {
+  ['qSearch','fAssignee','fPriority','fStatus','fDue'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+  compOnly = false; document.getElementById('compBtn').classList.remove('on'); render();
+}
+function rebuildAssigneeFilter() {
+  const sel = document.getElementById('fAssignee'); if (!sel) return;
+  const cur = sel.value;
+  const assignees = [...new Set([...cmap.values()].flatMap(c=>c.tasks.map(t=>t.assignee)).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All</option>' + assignees.map(a=>`<option value="${esc(a)}" ${a===cur?'selected':''}>${esc(a)}</option>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════
+function setSaveStatus(msg, state) {
+  document.getElementById('sstatus').textContent = msg;
+  document.getElementById('sdot').className = 'sdot ' + (state||'');
+}
+function hideLoad() {
+  const el = document.getElementById('loadScreen');
+  el.classList.add('out'); setTimeout(() => el.style.display='none', 450);
+  fitTopBar();
+}
+function fitTopBar() {
+  const h = document.getElementById('topBar').offsetHeight;
+  const sp = document.getElementById('topBarSpacer');
+  if (sp) sp.style.height = h + 'px';
+}
+window.addEventListener('resize', fitTopBar);
+let _tTimer = null;
+function toast(msg, cls='') {
+  const el = document.getElementById('toast');
+  el.innerHTML = msg; el.className = `toast ${cls} show`;
+  clearTimeout(_tTimer); _tTimer = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+// ═══════════════════════════════════════════════════════
+// KEYBOARD + EVENT DELEGATION
+// ═══════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.key==='/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) {
+    e.preventDefault(); document.getElementById('qSearch')?.focus();
+  }
+  if (e.key==='Escape') {
+    ['ovOnboard','ovImport','ovSettings'].forEach(id=>document.getElementById(id)?.classList.add('h'));
+    editingClient.clear(); render();
+  }
+  if (e.key==='n' && (e.metaKey||e.ctrlKey)) { e.preventDefault(); openOnboard(); }
+  if (e.key==='Enter' && e.target.classList.contains('at-input')) {
+    e.preventDefault();
+    const saveBtn = e.target.closest('.atform')?.querySelector('.at-save');
+    if (saveBtn) submitNewTask(saveBtn.dataset.ref);
+  }
+  if (e.key==='Enter' && e.target.classList.contains('ef-inp')) {
+    e.preventDefault();
+    const saveBtn = e.target.closest('.edit-form')?.querySelector('.ef-save');
+    if (saveBtn) saveClientEdit(saveBtn.dataset.ref);
+  }
+});
+
+['ovOnboard','ovImport','ovSettings'].forEach(id => {
+  document.getElementById(id).addEventListener('click', e => { if (e.target.id===id) document.getElementById(id).classList.add('h'); });
+});
+
+document.addEventListener('click', e => {
+  const atBtn  = e.target.closest('.add-task-btn');  if (atBtn)  { e.stopPropagation(); toggleAddTask(atBtn.dataset.ref); return; }
+  const atSave = e.target.closest('.at-save');        if (atSave) { e.stopPropagation(); submitNewTask(atSave.dataset.ref); return; }
+  const atCanc = e.target.closest('.at-cancel');      if (atCanc) { e.stopPropagation(); toggleAddTask(atCanc.dataset.ref); return; }
+  const tDel   = e.target.closest('.task-del-btn');   if (tDel)   { e.stopPropagation(); deleteTask(tDel.dataset.ref, tDel.dataset.id); return; }
+  const cDel   = e.target.closest('.card-del-btn');   if (cDel)   { e.stopPropagation(); confirmDeleteClient(cDel.dataset.ref); return; }
+  const ecBtn  = e.target.closest('.edit-client-btn'); if (ecBtn) { e.stopPropagation(); toggleEditClient(ecBtn.dataset.ref); return; }
+  const efSave = e.target.closest('.ef-save');         if (efSave){ e.stopPropagation(); saveClientEdit(efSave.dataset.ref); return; }
+  const efCanc = e.target.closest('.ef-cancel');       if (efCanc){ e.stopPropagation(); toggleEditClient(efCanc.dataset.ref); return; }
+  const mcBtn  = e.target.closest('.mark-complete-btn'); if (mcBtn){ e.stopPropagation(); moveToCompleted(mcBtn.dataset.ref); return; }
+});
+
+// ═══════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', loadData);
+</script>
+</body>
+</html>
